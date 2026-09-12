@@ -92,21 +92,21 @@ async function enviarAvisosDeHoy() {
   // Un aviso por cada pago de mañana o de hoy, y uno solo que junta a todos los que deben.
   const lotes: { cuarto: string; tipo: string; aviso: Aviso }[] = [];
   for (const a of avisos.filter((x) => x.tipo !== "debe")) {
-    lotes.push({ cuarto: a.room.id, tipo: a.tipo, aviso: { ...textoAviso(a), tag: `cobro-${a.room.id}-${hoy}` } });
+    lotes.push({ cuarto: a.room.id, tipo: a.tipo, aviso: { ...textoAviso(a), tag: "cobro-" + a.room.id + "-" + hoy } });
   }
   const deudores = avisos.filter((x) => x.tipo === "debe");
   if (deudores.length === 1) {
     const a = deudores[0];
-    lotes.push({ cuarto: a.room.id, tipo: "debe", aviso: { ...textoAviso(a), tag: `deuda-${a.room.id}-${hoy}` } });
+    lotes.push({ cuarto: a.room.id, tipo: "debe", aviso: { ...textoAviso(a), tag: "deuda-" + a.room.id + "-" + hoy } });
   } else if (deudores.length > 1) {
     const total = deudores.reduce((s, a) => s + a.monto, 0);
     lotes.push({
       cuarto: "*",
       tipo: "deudas",
       aviso: {
-        title: `😟 ${deudores.length} cuartos con deuda`,
-        body: `Cuartos ${deudores.map((a) => a.room.name).join(", ")}. Total ${money(total)}.`,
-        tag: `deudas-${hoy}`,
+        title: "😟 " + deudores.length + " cuartos con deuda",
+        body: "Cuartos " + deudores.map((a) => a.room.name).join(", ") + ". Total " + money(total) + ".",
+        tag: "deudas-" + hoy,
       },
     });
   }
@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
     if (accion === "llave") return responder({ llave: (await llaves()).publica });
 
     if (accion === "probar") {
-      const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+      const token = (req.headers.get("authorization") ?? "").replace(/^Bearer /i, "");
       const { data } = await admin.auth.getUser(token);
       if (data.user?.id !== CASA) return responder({ error: "sesion" }, 401);
       const entregados = await mandar({ title: "Mi Alquiler 🏠", body: "✅ Listo: aquí te llegarán los avisos de cobro.", tag: "prueba" });
