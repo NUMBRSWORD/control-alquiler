@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from "https://esm.sh/preact@10.24.3/hooks
 import htm from "https://esm.sh/htm@3.1.1";
 import * as C from "./lib/calc.js";
 import { demoData } from "./lib/demo.js";
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY, REQUIRE_LOGIN, CUENTA_CASA, PREFIJO_CLAVE, PIN_LARGO } from "./config.js";
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY, REQUIRE_LOGIN, PIN_LARGO } from "./config.js";
 
 const html = htm.bind(h);
 const { money, ymLabel, todayISO, thisYM, fechaLarga } = C;
@@ -233,15 +233,15 @@ function Cuadro({ data, room, ym, onClick }) {
 }
 
 /* =====================  CÓDIGO DE LA CASA  ===================== */
-// Se entra con un código de números, fácil para toda la familia. La app usa la
-// cuenta única de la casa en Supabase: su clave es PREFIJO_CLAVE + el código, y
-// el código no está guardado en ningún archivo. Supabase frena los intentos
-// seguidos, así que no se puede adivinar probando rápido.
+// Se entra con un código de números, fácil para toda la familia. La app manda el
+// código a la función "entrar" de Supabase, que lo revisa, frena los intentos
+// fallidos y devuelve la sesión de la cuenta de la casa. La cuenta y su clave
+// viven solo en Supabase, nunca en la app.
 function traducirError(e) {
-  const m = String(e?.message || e || "");
-  if (e?.status === 429 || /rate limit|too many/i.test(m)) return "Muchos intentos. Espera unos minutos.";
-  if (/invalid login|invalid credentials/i.test(m)) return "Código incorrecto. Inténtalo otra vez.";
-  if (/fetch|network/i.test(m)) return "Sin internet. Revisa tu conexión.";
+  const estado = e?.context?.status ?? e?.status;
+  if (estado === 429) return "Muchos intentos. Espera unos 15 minutos.";
+  if (estado === 401) return "Código incorrecto. Inténtalo otra vez.";
+  if (/fetch|network|send a request/i.test(String(e?.message || ""))) return "Sin internet. Revisa tu conexión.";
   return "No se pudo entrar. Inténtalo otra vez.";
 }
 
@@ -256,8 +256,10 @@ function Pin({ demo = false, onEntrar }) {
     try {
       if (demo) return onEntrar?.();
       const sb = await supabase();
-      const { error: err } = await sb.auth.signInWithPassword({ email: CUENTA_CASA, password: PREFIJO_CLAVE + codigo });
+      const { data, error: err } = await sb.functions.invoke("entrar", { body: { codigo } });
       if (err) throw err;
+      const { error: errSesion } = await sb.auth.setSession(data);
+      if (errSesion) throw errSesion;
     } catch (e) {
       console.error(e);
       setError(traducirError(e));

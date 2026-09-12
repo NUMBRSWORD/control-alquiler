@@ -6,13 +6,10 @@ export const SUPABASE_KEY = "sb_publishable_VyhOGRhMTR66qiOrl9LuxQ_4Odbm9-s";
 // configuren los avisos en Supabase; mientras esté vacía, el botón no aparece.
 export const VAPID_PUBLIC_KEY = "";
 
-// Entrada con código de números (fácil para toda la familia). La app entra a la
-// cuenta única de la casa en Supabase; su clave es PREFIJO_CLAVE + el código que
-// escribe la persona. El código no se guarda en ningún archivo.
-export const CUENTA_CASA = "casa@mialquiler.example";
-export const PREFIJO_CLAVE = "alquiler-";
+// Entrada con código de números (fácil para toda la familia). El código lo
+// revisa la función "entrar" de Supabase (supabase/functions/entrar); la cuenta
+// y su clave viven solo allá, nunca en la app.
 export const PIN_LARGO = 4;
 
-// Pedir el código para entrar. Se activa cuando la cuenta de la casa exista en
-// Supabase; si se activa antes, nadie podría entrar.
+// Pedir el código para entrar.
 export const REQUIRE_LOGIN = true;
