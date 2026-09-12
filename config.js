@@ -15,4 +15,4 @@ export const PIN_LARGO = 4;
 
 // Pedir el código para entrar. Se activa cuando la cuenta de la casa exista en
 // Supabase; si se activa antes, nadie podría entrar.
-export const REQUIRE_LOGIN = false;
+export const REQUIRE_LOGIN = true;
