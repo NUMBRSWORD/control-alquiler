@@ -1,0 +1,10 @@
+{
+  "name": "control-alquiler",
+  "private": true,
+  "type": "module",
+  "description": "Sin dependencias que instalar: Preact, htm y Supabase se cargan desde esm.sh en el navegador. Este archivo solo existe para 'npm test' y 'npm run dev'.",
+  "scripts": {
+    "test": "node --test \"lib/*.test.js\"",
+    "dev": "node tools/devserver.cjs"
+  }
+}

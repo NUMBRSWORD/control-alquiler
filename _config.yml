@@ -1,0 +1,5 @@
+# GitHub Pages publica esta carpeta tal cual; aquí solo se deja fuera lo que no es parte de la app.
+exclude:
+  - tools
+  - package.json
+  - "lib/*.test.js"
