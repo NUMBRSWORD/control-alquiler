@@ -5,15 +5,86 @@
 //                       x-avisos-secreto; revisa quién paga mañana, hoy o debe, y avisa.
 // Las llaves VAPID y el secreto de la tarea viven en la tabla ajustes_privados, que
 // solo ve el servidor: nadie tiene que copiarlas ni pegarlas.
-// Las reglas de cuándo avisar son las mismas de la app (lib/calc.js publicado).
 // Se despliega con "Verify JWT" apagado; cada acción revisa su propio permiso.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
-import { avisosDelDia, textoAviso, money } from "https://numbrsword.github.io/control-alquiler/lib/calc.js";
 
 const CASA = "49c5a2cc-9575-40e7-9773-23d68131e983"; // cuenta de la casa
 const APP_URL = "https://numbrsword.github.io/control-alquiler/";
 
+/* ---- Reglas de cobro: copia de lib/calc.js ----
+   Supabase no deja importar desde la página publicada, así que van aquí.
+   Si cambian las reglas en lib/calc.js, hay que copiarlas aquí también. */
+// deno-lint-ignore no-explicit-any
+type Dato = any;
+const pad = (n: number) => String(n).padStart(2, "0");
+const ymOf = (iso: string) => (iso || "").slice(0, 7);
+const shiftYM = (ym: string, delta: number) => {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1);
+};
+const ymRange = (desde: string, hasta: string) => {
+  const meses: string[] = [];
+  let m = desde;
+  for (let i = 0; m <= hasta && i < 400; i++) { meses.push(m); m = shiftYM(m, 1); }
+  return meses;
+};
+const diasDelMes = (ym: string) => {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+};
+const fechaVence = (ym: string, dia: unknown) =>
+  ym + "-" + pad(Math.min(Math.max(1, Number(dia) || 5), diasDelMes(ym)));
+const sumarDias = (iso: string, dias: number) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  const f = new Date(y, m - 1, d + dias);
+  return f.getFullYear() + "-" + pad(f.getMonth() + 1) + "-" + pad(f.getDate());
+};
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const money = (n: number) =>
+  "S/ " + (Number(n) || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const tieneInquilino = (r: Dato) => !!(r.tenant && String(r.tenant).trim());
+const ocupadoEn = (r: Dato, ym: string) => r.active !== false && tieneInquilino(r) && !(r.start && r.start > ym);
+const pagadoEn = (data: Dato, id: string, ym: string) =>
+  round2((data.payments?.[id]?.[ym] || []).reduce((s: number, p: Dato) => s + (Number(p.amount) || 0), 0));
+const faltaMes = (data: Dato, r: Dato, ym: string) =>
+  ocupadoEn(r, ym) ? Math.max(0, round2(Number(r.rent || 0) - pagadoEn(data, r.id, ym))) : 0;
+
+function deudaAcumulada(data: Dato, r: Dato, hasta: string) {
+  if (!ocupadoEn(r, hasta)) return 0;
+  const desde = r.start && r.start <= hasta ? r.start : hasta;
+  let deuda = 0;
+  for (const m of ymRange(desde, hasta)) deuda += Number(r.rent || 0) - pagadoEn(data, r.id, m);
+  return Math.max(0, round2(deuda));
+}
+
+// Un día antes del pago, el mismo día, y todos los días mientras haya deuda vencida.
+function avisosDelDia(data: Dato, hoy: string) {
+  const ym = ymOf(hoy);
+  const manana = sumarDias(hoy, 1);
+  const avisos: Dato[] = [];
+  for (const r of data.rooms || []) {
+    if (!ocupadoEn(r, ym)) continue;
+    const vence = fechaVence(ym, r.dueDay);
+    const falta = faltaMes(data, r, ym);
+    const deudaAnterior = deudaAcumulada(data, r, shiftYM(ym, -1));
+    const deudaVencida = round2(deudaAnterior + (hoy > vence ? falta : 0));
+    if (deudaVencida > 0) avisos.push({ tipo: "debe", room: r, monto: round2(deudaVencida + (hoy > vence ? 0 : falta)) });
+    else if (falta > 0 && vence === hoy) avisos.push({ tipo: "hoy", room: r, monto: falta });
+    else if (falta > 0 && vence === manana) avisos.push({ tipo: "manana", room: r, monto: falta });
+  }
+  return avisos;
+}
+
+function textoAviso(a: Dato) {
+  const quien = a.room.name + " · " + a.room.tenant;
+  if (a.tipo === "manana") return { title: "Mañana paga el " + a.room.name + " 📅", body: quien + ": " + money(a.monto) + " vence mañana." };
+  if (a.tipo === "hoy") return { title: "Hoy paga el " + a.room.name + " 💰", body: quien + ": " + money(a.monto) + " vence hoy." };
+  return { title: "El " + a.room.name + " tiene deuda 😟", body: quien + " debe " + money(a.monto) + "." };
+}
+
+/* ---- Servidor ---- */
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-avisos-secreto",
@@ -99,13 +170,13 @@ async function enviarAvisosDeHoy() {
     const a = deudores[0];
     lotes.push({ cuarto: a.room.id, tipo: "debe", aviso: { ...textoAviso(a), tag: "deuda-" + a.room.id + "-" + hoy } });
   } else if (deudores.length > 1) {
-    const total = deudores.reduce((s, a) => s + a.monto, 0);
+    const total = deudores.reduce((s: number, a: Dato) => s + a.monto, 0);
     lotes.push({
       cuarto: "*",
       tipo: "deudas",
       aviso: {
         title: "😟 " + deudores.length + " cuartos con deuda",
-        body: "Cuartos " + deudores.map((a) => a.room.name).join(", ") + ". Total " + money(total) + ".",
+        body: "Cuartos " + deudores.map((a: Dato) => a.room.name).join(", ") + ". Total " + money(total) + ".",
         tag: "deudas-" + hoy,
       },
     });
