@@ -254,7 +254,21 @@ body.con-hoja { overflow: hidden; }
 .login h1 { margin: 0; }
 .login p { margin: 0; color: var(--gris); }
 .login .campo { text-align: left; }
-.enlace-txt { background: none; border: 0; color: var(--morado); font-weight: 700; text-decoration: underline; }
+.pin { width: 100%; max-width: 340px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.pin h1 { margin: 0; }
+.pin p { margin: 0; color: var(--gris); min-height: 1.4em; }
+.pin p.rojo { color: var(--rojo); font-weight: 700; }
+.puntos { display: flex; gap: 16px; margin: 4px 0; }
+.puntos span { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--naranja); transition: background .1s; }
+.puntos span.lleno { background: var(--naranja); }
+.puntos.error { animation: sacude .4s; }
+.puntos.error span { border-color: var(--rojo); }
+@keyframes sacude { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+.teclado { display: grid; grid-template-columns: repeat(3, 78px); gap: 14px; margin-top: 6px; }
+.tecla { width: 78px; height: 78px; border-radius: 50%; border: 2px solid var(--linea); background: #fff; box-shadow: var(--sombra); font-size: 32px; font-weight: 800; color: var(--tinta); transition: transform .1s; }
+.tecla:active { transform: translateY(2px) scale(.96); background: var(--naranja-s); }
+.tecla:disabled { opacity: .5; }
+.tecla.suave { background: transparent; box-shadow: none; border-color: transparent; font-size: 28px; }
 
 /* ---------- comprobante y reporte (imprimibles) ---------- */
 .doc { background: #fff; border-radius: 16px; padding: 22px; font-family: Georgia, "Times New Roman", serif; color: #1b1b1b; position: relative; border: 2px solid var(--linea); overflow-x: auto; }

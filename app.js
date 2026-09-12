@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from "https://esm.sh/preact@10.24.3/hooks
 import htm from "https://esm.sh/htm@3.1.1";
 import * as C from "./lib/calc.js";
 import { demoData } from "./lib/demo.js";
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY, REQUIRE_LOGIN } from "./config.js";
+import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY, REQUIRE_LOGIN, CUENTA_CASA, PREFIJO_CLAVE, PIN_LARGO } from "./config.js";
 
 const html = htm.bind(h);
 const { money, ymLabel, todayISO, thisYM, fechaLarga } = C;
@@ -232,70 +232,91 @@ function Cuadro({ data, room, ym, onClick }) {
     </button>`;
 }
 
-/* =====================  INICIO DE SESIÓN  ===================== */
+/* =====================  CÓDIGO DE LA CASA  ===================== */
+// Se entra con un código de números, fácil para toda la familia. La app usa la
+// cuenta única de la casa en Supabase: su clave es PREFIJO_CLAVE + el código, y
+// el código no está guardado en ningún archivo. Supabase frena los intentos
+// seguidos, así que no se puede adivinar probando rápido.
 function traducirError(e) {
   const m = String(e?.message || e || "");
-  if (/invalid login/i.test(m)) return "Correo o contraseña incorrectos.";
-  if (/not confirmed/i.test(m)) return "Primero confirma tu correo: revisa tu bandeja de entrada.";
-  if (/at least 6/i.test(m)) return "La contraseña debe tener al menos 6 caracteres.";
-  if (/signups? not allowed|disabled/i.test(m)) return "No se pueden crear cuentas nuevas.";
-  if (/already registered/i.test(m)) return "Ese correo ya tiene cuenta. Usa “Entrar”.";
-  return m || "Algo salió mal. Inténtalo de nuevo.";
+  if (e?.status === 429 || /rate limit|too many/i.test(m)) return "Muchos intentos. Espera unos minutos.";
+  if (/invalid login|invalid credentials/i.test(m)) return "Código incorrecto. Inténtalo otra vez.";
+  if (/fetch|network/i.test(m)) return "Sin internet. Revisa tu conexión.";
+  return "No se pudo entrar. Inténtalo otra vez.";
 }
 
-function Login() {
-  const [modo, setModo] = useState("entrar");
-  const [email, setEmail] = useState("");
-  const [clave, setClave] = useState("");
-  const [mensaje, setMensaje] = useState("");
+function Pin({ demo = false, onEntrar }) {
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [sacude, setSacude] = useState(false);
 
-  const enviar = async (e) => {
-    e.preventDefault();
-    setOcupado(true); setMensaje("");
+  const probar = async (codigo) => {
+    setOcupado(true);
     try {
+      if (demo) return onEntrar?.();
       const sb = await supabase();
-      if (modo === "entrar") {
-        const { error } = await sb.auth.signInWithPassword({ email, password: clave });
-        if (error) throw error;
-      } else {
-        const { error } = await sb.auth.signUp({ email, password: clave, options: { emailRedirectTo: location.origin + location.pathname } });
-        if (error) throw error;
-        setMensaje("📧 Te enviamos un correo. Ábrelo para confirmar tu cuenta y luego entra aquí.");
-        setModo("entrar");
-      }
-    } catch (err) {
-      setMensaje(traducirError(err));
+      const { error: err } = await sb.auth.signInWithPassword({ email: CUENTA_CASA, password: PREFIJO_CLAVE + codigo });
+      if (err) throw err;
+    } catch (e) {
+      console.error(e);
+      setError(traducirError(e));
+      setSacude(true);
+      setTimeout(() => setSacude(false), 450);
+      setPin("");
     } finally {
       setOcupado(false);
     }
   };
+  const tocar = (d) => {
+    if (ocupado || pin.length >= PIN_LARGO) return;
+    const nuevo = pin + d;
+    setError("");
+    setPin(nuevo);
+    if (nuevo.length === PIN_LARGO) probar(nuevo);
+  };
+  const borrar = () => { if (!ocupado) setPin(pin.slice(0, -1)); };
+
+  // En la PC también se puede escribir el código con el teclado.
+  const teclas = useRef({});
+  teclas.current = { tocar, borrar };
+  useEffect(() => {
+    const f = (e) => {
+      if (/^[0-9]$/.test(e.key)) teclas.current.tocar(e.key);
+      else if (e.key === "Backspace") teclas.current.borrar();
+    };
+    addEventListener("keydown", f);
+    return () => removeEventListener("keydown", f);
+  }, []);
 
   return html`
     <div class="pantalla-centro">
-      <form class="card login" onSubmit=${enviar}>
-        <div class="grande">🏠</div>
+      <div class="pin">
+        <div class="grande" aria-hidden="true">🏠</div>
         <h1>Mi Alquiler</h1>
-        <p>${modo === "entrar" ? "Entra con tu correo y contraseña." : "Crea tu cuenta (solo la primera vez)."}</p>
-        <${Campo} label="Correo" tipo="email" valor=${email} onInput=${setEmail} autocomplete="username" required />
-        <${Campo} label="Contraseña" tipo="password" valor=${clave} onInput=${setClave}
-          autocomplete=${modo === "entrar" ? "current-password" : "new-password"} required minlength="6" />
-        ${mensaje && html`<p class="mensaje" role="alert">${mensaje}</p>`}
-        <button class="btn primario ancho" type="submit" disabled=${ocupado}>
-          ${ocupado ? "Un momento…" : modo === "entrar" ? "Entrar" : "Crear mi cuenta"}
-        </button>
-        <button type="button" class="enlace-txt" onClick=${() => { setModo(modo === "entrar" ? "crear" : "entrar"); setMensaje(""); }}>
-          ${modo === "entrar" ? "¿Primera vez? Crear mi cuenta" : "Ya tengo cuenta: entrar"}
-        </button>
-      </form>
+        <p>Escribe el código de la casa</p>
+        <div class=${"puntos" + (sacude ? " error" : "")} role="img" aria-label=${`${pin.length} de ${PIN_LARGO} números escritos`}>
+          ${Array.from({ length: PIN_LARGO }, (_, i) => html`<span key=${i} class=${i < pin.length ? "lleno" : ""}></span>`)}
+        </div>
+        <p class=${error ? "rojo" : ""} role="status">${error || (ocupado ? "Entrando…" : " ")}</p>
+        <div class="teclado">
+          ${["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => html`<button key=${d} class="tecla" onClick=${() => tocar(d)} disabled=${ocupado}>${d}</button>`)}
+          <span></span>
+          <button class="tecla" onClick=${() => tocar("0")} disabled=${ocupado}>0</button>
+          <button class="tecla suave" onClick=${borrar} disabled=${ocupado} aria-label="Borrar">⌫</button>
+        </div>
+      </div>
     </div>`;
 }
 
 /* =====================  APP  ===================== */
 function App() {
-  const [sesion, setSesion] = useState(DEMO || !REQUIRE_LOGIN ? null : undefined);
+  const pedirCodigo = REQUIRE_LOGIN && !DEMO;
+  // Con ?demo&pin se ve la pantalla del código con datos inventados (cualquier código entra).
+  const [demoDentro, setDemoDentro] = useState(!(DEMO && new URLSearchParams(location.search).has("pin")));
+  const [sesion, setSesion] = useState(pedirCodigo ? undefined : null);
   useEffect(() => {
-    if (DEMO || !REQUIRE_LOGIN) return;
+    if (!pedirCodigo) return;
     let sub;
     supabase().then(async (sb) => {
       const { data } = await sb.auth.getSession();
@@ -305,8 +326,9 @@ function App() {
     return () => sub?.unsubscribe();
   }, []);
 
+  if (!demoDentro) return html`<${Pin} demo onEntrar=${() => setDemoDentro(true)} />`;
   if (sesion === undefined) return html`<div class="cargando"><span class="rebote">🏠</span> Cargando…</div>`;
-  if (REQUIRE_LOGIN && !DEMO && !sesion) return html`<${Login} />`;
+  if (pedirCodigo && !sesion) return html`<${Pin} />`;
   return html`<${Casa} sesion=${sesion} />`;
 }
 
@@ -1118,7 +1140,7 @@ function Ajustes({ data, upd, reemplazar, avisar, sesion }) {
     lector.readAsText(f);
   };
   const salir = async () => {
-    if (!confirm("¿Cerrar sesión en este celular?")) return;
+    if (!confirm("¿Cerrar sesión? Luego la app pedirá el código otra vez.")) return;
     (await supabase()).auth.signOut();
   };
 
@@ -1174,9 +1196,9 @@ function Ajustes({ data, upd, reemplazar, avisar, sesion }) {
 
     ${sesion && html`
       <section class="card">
-        <h2>👤 Cuenta</h2>
-        <p class="gris">Entraste como <b>${sesion.user?.email}</b>.</p>
-        <button class="btn peligro" onClick=${salir}>🚪 Cerrar sesión</button>
+        <h2>🔒 Código de la casa</h2>
+        <p class="gris">Este celular ya entró con el código. Si cierras la sesión, la app pedirá el código otra vez.</p>
+        <button class="btn peligro" onClick=${salir}>🚪 Cerrar sesión en este celular</button>
       </section>`}
   `;
 }
