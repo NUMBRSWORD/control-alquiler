@@ -543,14 +543,13 @@ function ListaDeuda({ data, ym, onClose, abrirCuarto }) {
                 <button class="item-abrir" onClick=${() => abrirCuarto(x.room.id)}>
                   <${MiniCuadro} data=${data} room=${x.room} ym=${ym} />
                   <span class="item-main">
-                    <b>${x.room.tenant}</b>
+                    <span class="item-top"><b>${x.room.tenant}</b><b class="monto rojo">${money(x.deuda)}</b></span>
                     <small>${x.falta > 0 ? `Este mes falta ${money(x.falta)}` : "Este mes ya pagó"}</small>
                     ${x.deuda > x.falta && html`<small>Meses anteriores: ${money(x.deuda - x.falta)}</small>`}
                     ${x.falta > 0
                       ? html`<small class=${x.vencido ? "vencido" : ""}>${x.vencido ? "⏰ Venció el " : "📅 Vence el "}${fechaLarga(x.vence)}</small>`
                       : html`<small class="vencido">⏰ Debe de meses anteriores</small>`}
                   </span>
-                  <b class="monto rojo">${money(x.deuda)}</b>
                 </button>
                 ${x.room.phone && html`<a class="wa" href=${waLink(x.room.phone, textoCobro(x.room, x.deuda))} target="_blank" rel="noopener" aria-label=${`Recordar por WhatsApp a ${x.room.tenant}`}>💬</a>`}
               </div>`)}
