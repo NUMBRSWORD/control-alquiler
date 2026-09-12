@@ -2,7 +2,7 @@
 //  1. Guarda una copia de la app para que abra rápido y funcione con mala
 //     señal (los datos siempre vienen de Supabase en línea; nunca se guardan aquí).
 //  2. Muestra los avisos de cobro que llegan por Web Push.
-const CACHE = "mi-alquiler-v1";
+const CACHE = "mi-alquiler-v2";
 const APP_SHELL = [
   "./",
   "./index.html",

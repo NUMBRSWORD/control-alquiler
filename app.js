@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from "https://esm.sh/preact@10.24.3/hooks
 import htm from "https://esm.sh/htm@3.1.1";
 import * as C from "./lib/calc.js";
 import { demoData } from "./lib/demo.js";
-import { SUPABASE_URL, SUPABASE_KEY, VAPID_PUBLIC_KEY, REQUIRE_LOGIN, PIN_LARGO } from "./config.js";
+import { SUPABASE_URL, SUPABASE_KEY, REQUIRE_LOGIN, PIN_LARGO } from "./config.js";
 
 const html = htm.bind(h);
 const { money, ymLabel, todayISO, thisYM, fechaLarga } = C;
@@ -110,6 +110,7 @@ addEventListener("beforeinstallprompt", (e) => {
   eventoInstalar = e;
   dispatchEvent(new Event("instalable"));
 });
+addEventListener("appinstalled", () => { eventoInstalar = null; });
 if ("serviceWorker" in navigator) {
   addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch((e) => console.warn("Service worker:", e)));
 }
@@ -120,22 +121,119 @@ const b64aBytes = (s) => {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 };
 
-async function activarAvisos(sesion) {
+// Pide permiso, suscribe este celular con la llave pública de la función
+// "avisos" y lo registra en Supabase; al final pide un aviso de prueba.
+async function activarAvisos() {
+  if (DEMO) throw new Error("En el modo de prueba no se activan avisos.");
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     throw new Error("Este celular no permite avisos. En iPhone, primero instala la app en la pantalla de inicio.");
   }
   const permiso = await Notification.requestPermission();
   if (permiso !== "granted") throw new Error("No diste permiso para los avisos.");
-  const reg = await navigator.serviceWorker.ready;
-  const sus = (await reg.pushManager.getSubscription()) ||
-    (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64aBytes(VAPID_PUBLIC_KEY) }));
-  const j = sus.toJSON();
   const sb = await supabase();
-  const { error } = await sb.from("avisos_suscripciones").upsert({
-    endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth,
-    user_id: sesion?.user?.id ?? null, updated_at: new Date().toISOString(),
-  }, { onConflict: "endpoint" });
+  const { data, error: errLlave } = await sb.functions.invoke("avisos", { body: { accion: "llave" } });
+  if (errLlave || !data?.llave) throw new Error("No se pudieron preparar los avisos. Inténtalo otra vez.");
+  const llave = b64aBytes(data.llave);
+  const reg = await navigator.serviceWorker.ready;
+  let sus = await reg.pushManager.getSubscription();
+  const actual = sus ? new Uint8Array(sus.options.applicationServerKey || []) : null;
+  if (sus && !(actual.length === llave.length && actual.every((b, i) => b === llave[i]))) {
+    await sus.unsubscribe(); // estaba suscrito con otra llave
+    sus = null;
+  }
+  sus ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: llave });
+  const j = sus.toJSON();
+  const { error } = await sb.from("avisos_suscripciones").upsert(
+    { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, actualizado: new Date().toISOString() },
+    { onConflict: "endpoint" },
+  );
   if (error) throw error;
+  await sb.functions.invoke("avisos", { body: { accion: "probar" } }).catch(() => {});
+}
+
+// Estado de "la app en este celular": si está instalada, si se puede instalar
+// y si los avisos están activos. Lo usan el panel de Inicio y Ajustes.
+function useCelular() {
+  const esIPhone = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const puedeAvisos = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const [instalada, setInstalada] = useState(() => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true);
+  const [instalable, setInstalable] = useState(!!eventoInstalar);
+  const [avisos, setAvisos] = useState("revisando"); // revisando | activos | inactivos | bloqueados | no-soportado
+  const [mensaje, setMensaje] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+
+  useEffect(() => {
+    const alPoder = () => setInstalable(!!eventoInstalar);
+    const alInstalar = () => { setInstalable(false); setInstalada(true); };
+    addEventListener("instalable", alPoder);
+    addEventListener("appinstalled", alInstalar);
+    return () => { removeEventListener("instalable", alPoder); removeEventListener("appinstalled", alInstalar); };
+  }, []);
+
+  useEffect(() => {
+    if (!puedeAvisos) { setAvisos("no-soportado"); return; }
+    if (Notification.permission === "denied") { setAvisos("bloqueados"); return; }
+    const espera = new Promise((r) => setTimeout(() => r(null), 4000)); // por si el service worker no responde
+    Promise.race([navigator.serviceWorker.ready.then((reg) => reg.pushManager.getSubscription()), espera])
+      .then((s) => setAvisos(s && Notification.permission === "granted" ? "activos" : "inactivos"))
+      .catch(() => setAvisos("inactivos"));
+  }, []);
+
+  const instalar = async () => {
+    if (!eventoInstalar) return;
+    eventoInstalar.prompt();
+    const { outcome } = await eventoInstalar.userChoice;
+    eventoInstalar = null;
+    setInstalable(false);
+    if (outcome === "accepted") setMensaje("📲 Instalando… Luego ábrela desde su ícono y activa los avisos.");
+  };
+  const activar = async () => {
+    setOcupado(true);
+    setMensaje("");
+    try {
+      await activarAvisos();
+      setAvisos("activos");
+      setMensaje("✅ Listo. Te mandé un aviso de prueba.");
+    } catch (e) {
+      console.error(e);
+      if ("Notification" in window && Notification.permission === "denied") setAvisos("bloqueados");
+      setMensaje("⚠️ " + (e.message || "No se pudieron activar los avisos."));
+    } finally {
+      setOcupado(false);
+    }
+  };
+  return { esIPhone, instalada, puedeAvisos, instalable, avisos, mensaje, ocupado, instalar, activar };
+}
+
+// Panel "Mi Alquiler en tu celular": invita a instalar la app y a activar los
+// avisos, como en Moral y Disciplina. Cuando todo está listo se achica.
+function PanelCelular({ celular, siempre = false }) {
+  const { esIPhone, instalada, puedeAvisos, instalable, avisos, mensaje, ocupado, instalar, activar } = celular;
+  if (avisos === "revisando") return null;
+  const listo = instalada && avisos === "activos";
+  if (listo && !siempre) return html`<p class="celular-ok">✅ App instalada y avisos activados en este celular.</p>`;
+  const paso = listo ? "✅ Todo listo: la app está instalada y los avisos llegan a este celular."
+    : avisos === "bloqueados" ? "Los avisos están bloqueados. Actívalos en los ajustes del celular: Notificaciones → Mi Alquiler."
+    : !instalada && esIPhone ? "En iPhone: toca Compartir ⬆️ y “Añadir a pantalla de inicio”. Luego ábrela desde su ícono y activa los avisos."
+    : avisos === "no-soportado" ? "Este navegador no permite avisos. Ábrela en Chrome."
+    : !instalada && instalable ? "Instálala para tenerla con su ícono, y activa los avisos de cobro."
+    : !instalada ? "Para instalarla: menú ⋮ de Chrome → “Instalar aplicación”. Y activa los avisos de cobro."
+    : avisos === "activos" ? "✅ Los avisos ya llegan a este celular."
+    : "Activa los avisos para saber cuándo le toca pagar a cada inquilino.";
+  return html`
+    <section class=${"celular" + (listo ? " listo" : "")}>
+      <span class="celular-ico" aria-hidden="true">📱</span>
+      <div class="celular-txt">
+        <b>Mi Alquiler en tu celular</b>
+        <small>${paso}</small>
+        ${mensaje && html`<small class="celular-msg" role="status">${mensaje}</small>`}
+      </div>
+      <div class="celular-botones">
+        ${!instalada && instalable && html`<button class="btn" onClick=${instalar}>📲 Instalar</button>`}
+        ${puedeAvisos && avisos === "inactivos" && html`
+          <button class="btn primario" onClick=${activar} disabled=${ocupado}>${ocupado ? "Activando…" : "🔔 Activar avisos"}</button>`}
+      </div>
+    </section>`;
 }
 
 function exportarICS(data, avisar) {
@@ -352,6 +450,7 @@ function Casa({ sesion }) {
   const [comprobante, setComprobante] = useState(null);
   const [reporte, setReporte] = useState(null);
   const [toast, setToast] = useState("");
+  const celular = useCelular();
   const tToast = useRef(0);
   const sucio = useRef(false);    // hay cambios sin guardar
   const version = useRef(0);      // sube con cada cambio
@@ -443,11 +542,11 @@ function Casa({ sesion }) {
       ${DEMO && html`<div class="franja-demo">🧪 Modo de prueba: los datos son inventados y no se guardan.</div>`}
 
       <main class="contenido">
-        ${tab === "inicio" && html`<${Inicio} data=${data} ym=${ym} abrirLista=${setLista} irA=${cambiarTab} abrirCuarto=${setCuartoId} />`}
+        ${tab === "inicio" && html`<${Inicio} data=${data} ym=${ym} abrirLista=${setLista} irA=${cambiarTab} abrirCuarto=${setCuartoId} celular=${celular} />`}
         ${tab === "cuartos" && html`<${Cuartos} data=${data} ym=${ym} abrirCuarto=${setCuartoId} />`}
         ${tab === "gastos" && html`<${Gastos} data=${data} ym=${ym} upd=${upd} avisar=${avisar} />`}
         ${tab === "total" && html`<${Total} data=${data} ym=${ym} irAMes=${irAMes} />`}
-        ${tab === "ajustes" && html`<${Ajustes} data=${data} upd=${upd} reemplazar=${reemplazar} avisar=${avisar} sesion=${sesion} />`}
+        ${tab === "ajustes" && html`<${Ajustes} data=${data} upd=${upd} reemplazar=${reemplazar} avisar=${avisar} sesion=${sesion} celular=${celular} />`}
       </main>
 
       <nav class="abajo" aria-label="Secciones">
@@ -472,7 +571,7 @@ function Casa({ sesion }) {
 }
 
 /* =====================  INICIO  ===================== */
-function Inicio({ data, ym, abrirLista, irA, abrirCuarto }) {
+function Inicio({ data, ym, abrirLista, irA, abrirCuarto, celular }) {
   const r = C.resumenMes(data, ym);
   const hoy = todayISO();
   const pagaron = C.listaCobrados(data, ym).length;
@@ -481,6 +580,7 @@ function Inicio({ data, ym, abrirLista, irA, abrirCuarto }) {
   const avisos = ym === thisYM() ? C.avisosDelDia(data, hoy) : [];
 
   return html`
+    <${PanelCelular} celular=${celular} />
     <section class="saludo">
       <h1>¡Hola! 👋</h1>
       <p>Así va <b>${ymLabel(ym)}</b></p>
@@ -1094,33 +1194,10 @@ function Total({ data, ym, irAMes }) {
 }
 
 /* =====================  AJUSTES  ===================== */
-function Ajustes({ data, upd, reemplazar, avisar, sesion }) {
+function Ajustes({ data, upd, reemplazar, avisar, sesion, celular }) {
   const l = data.landlord;
   const set = (k) => (v) => upd((d) => { d.landlord[k] = v; });
   const archivo = useRef(null);
-  const [instalable, setInstalable] = useState(!!eventoInstalar);
-  const [estadoAvisos, setEstadoAvisos] = useState("");
-  useEffect(() => {
-    const f = () => setInstalable(true);
-    addEventListener("instalable", f);
-    return () => removeEventListener("instalable", f);
-  }, []);
-  const esIPhone = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const instalada = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-  const puedeAvisos = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
-
-  const instalar = async () => {
-    if (!eventoInstalar) return;
-    eventoInstalar.prompt();
-    await eventoInstalar.userChoice;
-    eventoInstalar = null;
-    setInstalable(false);
-  };
-  const activar = async () => {
-    setEstadoAvisos("Activando…");
-    try { await activarAvisos(sesion); setEstadoAvisos("✅ Listo: te llegarán los avisos de cobro a este celular."); }
-    catch (e) { console.error(e); setEstadoAvisos("⚠️ " + (e.message || "No se pudieron activar los avisos.")); }
-  };
   const respaldo = () => {
     descargar(JSON.stringify(data, null, 2), `respaldo-alquiler-${todayISO()}.json`, "application/json");
     avisar("⬇️ Respaldo descargado.");
@@ -1148,25 +1225,9 @@ function Ajustes({ data, upd, reemplazar, avisar, sesion }) {
 
   return html`
     <section class="card">
-      <h2>🔔 Avisos de cobro</h2>
-      <p class="gris">Te avisa un día antes y el día que le toca pagar a cada inquilino, y todos los días mientras alguien deba.</p>
-      ${!VAPID_PUBLIC_KEY
-        ? html`<p class="pista">Los avisos al celular se activan cuando termine de configurar tu cuenta. Mientras tanto puedes usar Google Calendar (más abajo).</p>`
-        : !puedeAvisos
-          ? html`<p class="pista">${esIPhone ? "En iPhone, primero instala la app en la pantalla de inicio y ábrela desde ahí." : "Este navegador no permite avisos. Usa Chrome."}</p>`
-          : html`<button class="btn primario" onClick=${activar}>🔔 Activar avisos en este celular</button>`}
-      ${estadoAvisos && html`<p class="mensaje">${estadoAvisos}</p>`}
-    </section>
-
-    <section class="card">
-      <h2>📲 Instalar la app</h2>
-      ${instalada
-        ? html`<p class="gris">✅ Ya estás usando la app instalada.</p>`
-        : instalable
-          ? html`<button class="btn primario" onClick=${instalar}>📲 Instalar en este celular</button>`
-          : esIPhone
-            ? html`<p class="gris">En iPhone: toca el botón <b>Compartir</b> ⬆️ de Safari y luego <b>“Añadir a pantalla de inicio”</b>.</p>`
-            : html`<p class="gris">En Android: abre el menú ⋮ de Chrome y toca <b>“Instalar aplicación”</b> o <b>“Agregar a pantalla principal”</b>.</p>`}
+      <h2>📱 App y avisos en este celular</h2>
+      <p class="gris">Cada mañana a las 7 te avisa quién paga mañana, quién paga hoy y quiénes deben (en un solo aviso).</p>
+      <${PanelCelular} celular=${celular} siempre />
     </section>
 
     <section class="card">

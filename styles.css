@@ -247,6 +247,19 @@ body.con-hoja { overflow: hidden; }
 
 .toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--tinta); color: #fff; padding: 12px 18px; border-radius: 999px; font-size: 15px; font-weight: 600; z-index: 90; box-shadow: 0 8px 24px rgba(0, 0, 0, .2); max-width: 90vw; text-align: center; }
 
+/* ---------- la app en este celular (instalar y avisos) ---------- */
+.celular { display: flex; align-items: center; gap: 12px; background: var(--azul-s); border: 2px solid #bcdcff; border-radius: var(--radio); padding: 12px 14px; box-shadow: var(--sombra); flex-wrap: wrap; }
+.celular.listo { background: var(--verde-s); border-color: #9fe3c2; }
+.celular-ico { font-size: 34px; line-height: 1; }
+.celular-txt { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 2px; }
+.celular-txt b { color: #1b5fb0; }
+.celular-txt small { color: #2d4f7c; font-size: 13px; line-height: 1.35; }
+.celular-msg { font-weight: 700; }
+.celular-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+.celular-botones:empty { display: none; }
+.celular-ok { margin: 0; text-align: center; color: var(--verde); font-weight: 700; font-size: 14px; }
+.card .celular { box-shadow: none; }
+
 /* ---------- inicio de sesión y errores ---------- */
 .pantalla-centro { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
 .login { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px; text-align: center; }
