@@ -1,6 +1,8 @@
 // Función "entrar": revisa el código de la casa y, si es correcto, devuelve la
-// sesión de la cuenta de la casa. La clave de esa cuenta es el secreto
-// CLAVE_PREFIJO + el código, así que no aparece en la app ni en este archivo.
+// sesión de la cuenta de la casa. La clave de esa cuenta sale del secreto
+// CLAVE_PREFIJO, así que no aparece en la app ni en este archivo. El secreto
+// puede tener solo las letras de la clave (clave = letras + código) o la clave
+// completa (entonces el código tiene que ser su final); funciona de las dos formas.
 // Frena a quien pruebe códigos: pocos intentos fallidos por IP y en total.
 //
 // Se despliega en Supabase con "Verify JWT" apagado: la app entra sin sesión
@@ -23,8 +25,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return responder({ error: "metodo" }, 405);
 
-  const prefijo = Deno.env.get("CLAVE_PREFIJO");
-  if (!prefijo) return responder({ error: "falta CLAVE_PREFIJO" }, 500);
+  const secreto = Deno.env.get("CLAVE_PREFIJO");
+  if (!secreto) return responder({ error: "falta CLAVE_PREFIJO" }, 500);
 
   let codigo = "";
   try { codigo = String((await req.json()).codigo ?? ""); } catch { /* cuerpo vacío o mal formado */ }
@@ -47,7 +49,8 @@ Deno.serve(async (req) => {
     return responder({ error: "espera" }, 429);
   }
 
-  const { data, error } = await acceso.auth.signInWithPassword({ email: CUENTA, password: prefijo + codigo });
+  const clave = secreto.endsWith(codigo) ? secreto : secreto + codigo;
+  const { data, error } = await acceso.auth.signInWithPassword({ email: CUENTA, password: clave });
   await admin.from("intentos_entrar").insert({ ip, exito: !error });
   if (error || !data.session) return responder({ error: "incorrecto" }, 401);
 
