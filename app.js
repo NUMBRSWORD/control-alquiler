@@ -607,8 +607,10 @@ function Inicio({ data, ym, abrirLista, irA, abrirCuarto, celular }) {
       <span class="caja-ico" aria-hidden="true">🐷</span>
       <div>
         <small>Queda en caja de ${ymLabel(ym)}</small>
-        <b class=${r.caja < 0 ? "neg" : ""}>${money(r.caja)}</b>
-        <small>Solo este mes: cobrado menos gastos</small>
+        <b class=${r.cajaFinal < 0 ? "neg" : ""}>${money(r.cajaFinal)}</b>
+        <small>Este mes: ${money(r.caja)} (cobrado menos gastos)</small>
+        ${r.arrastre < 0 && html`
+          <small class="caja-rojo">🔴 Se descontó ${money(-r.arrastre)} que faltó de meses anteriores${r.cajaFinal >= 0 ? ", y ya quedó cubierto" : ""}</small>`}
       </div>
     </section>
     <button class="enlace" onClick=${() => irA("total")}>📊 Ver el total de todos los meses →</button>
@@ -1187,6 +1189,7 @@ function Total({ data, ym, irAMes }) {
             <span><small>Cobrado</small><b class="verde">${money(m.cobrado)}</b></span>
             <span><small>Gastos</small><b>${money(m.gastos)}</b></span>
             <span><small>Caja del mes</small><b class=${m.caja < 0 ? "neg" : ""}>${money(m.caja)}</b></span>
+            <span><small>Caja acumulada</small><b class=${m.acumulado < 0 ? "neg" : ""}>${money(m.acumulado)}</b></span>
           </button>`)}
       </div>
     </section>

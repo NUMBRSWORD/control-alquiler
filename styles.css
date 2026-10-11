@@ -52,6 +52,7 @@ body.con-hoja { overflow: hidden; }
 .verde { color: var(--verde); }
 .rojo { color: var(--rojo); }
 .neg { color: var(--rojo) !important; }
+.caja-rojo { color: #a3203c !important; font-weight: 700; }
 .grande { font-size: 40px; }
 
 /* ---------- inicio ---------- */
@@ -227,12 +228,12 @@ body.con-hoja { overflow: hidden; }
 .g-main small { color: var(--gris); font-size: 13px; }
 .etiqueta { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; background: var(--morado-s); color: #4a33c9; margin-left: 6px; vertical-align: middle; }
 .meses { display: flex; flex-direction: column; gap: 8px; }
-.mes-fila { border: 0; background: var(--fondo); border-radius: 16px; padding: 10px 12px; display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 6px; align-items: center; text-align: left; }
+.mes-fila { border: 0; background: var(--fondo); border-radius: 16px; padding: 10px 12px; display: grid; grid-template-columns: 1.3fr repeat(4, 1fr); gap: 6px; align-items: center; text-align: left; }
 .mes-fila span { display: flex; flex-direction: column; }
 .mes-fila small { font-size: 11px; color: var(--gris); }
 .mes-fila b { font-size: 14px; }
 .mes-n { font-weight: 800; text-transform: capitalize; }
-@media (max-width: 480px) { .mes-fila { grid-template-columns: 1fr 1fr 1fr; } .mes-n { grid-column: 1 / -1; } }
+@media (max-width: 480px) { .mes-fila { grid-template-columns: 1fr 1fr; } .mes-n { grid-column: 1 / -1; } }
 
 /* ---------- barra de abajo ---------- */
 .abajo {
