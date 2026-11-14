@@ -16,8 +16,8 @@ const KEY_DATA = "casa:data:v1";
 const contractKey = (id) => `casa:contrato:${id}`;
 const DEMO = new URLSearchParams(location.search).has("demo");
 
-const CARA = { pagado: "😄", parcial: "🙂", pendiente: "😟", libre: "💤", inactivo: "🚫" };
-const ESTADO_TXT = { pagado: "Pagó este mes", parcial: "Pagó una parte", pendiente: "Todavía no paga", libre: "Cuarto libre", inactivo: "No se alquila" };
+const CARA = { pagado: "😄", parcial: "🙂", pendiente: "😟", libre: "💤", inactivo: "🚫", sefue: "👋" };
+const ESTADO_TXT = { pagado: "Pagó este mes", parcial: "Pagó una parte", pendiente: "Todavía no paga", libre: "Cuarto libre", inactivo: "No se alquila", sefue: "Se fue debiendo" };
 const ICONO_METODO = { Efectivo: "💵", Yape: "📱", Plin: "📲", Transferencia: "🏦", Depósito: "🏧", Otro: "✨" };
 const ICONO_CAT = {
   Agua: "💧", Luz: "💡", Gas: "🔥", Tributos: "🏛️", Arbitrios: "📜", Internet: "📶", Mantenimiento: "🛠️",
@@ -74,7 +74,7 @@ function cuartosBase() {
   for (const f of C.FLOORS) {
     for (let i = 1; i <= f.count; i++) {
       const id = `${f.n}${C.pad(i)}`;
-      rooms.push({ id, floor: f.n, name: id, tenant: "", doc: "", phone: "", rent: 0, deposit: 0, start: "", dueDay: 5, active: true, notes: "", ubicacion: "" });
+      rooms.push({ id, floor: f.n, name: id, tenant: "", doc: "", phone: "", rent: 0, deposit: 0, start: "", fin: "", dueDay: 5, active: true, notes: "", ubicacion: "" });
     }
   }
   return rooms;
@@ -85,7 +85,7 @@ function normalizar(d = {}) {
   const base = cuartosBase();
   const guardados = new Map((d.rooms || []).map((r) => [r.id, r]));
   const rooms = base.map((r) => ({ ...r, ...(guardados.get(r.id) || {}) }));
-  for (const r of d.rooms || []) if (!base.some((b) => b.id === r.id)) rooms.push({ ubicacion: "", ...r });
+  for (const r of d.rooms || []) if (!base.some((b) => b.id === r.id)) rooms.push({ ubicacion: "", fin: "", ...r });
   return {
     ...d,
     landlord: { name: "", doc: "", address: "", phone: "", email: "", ...(d.landlord || {}) },
@@ -674,6 +674,8 @@ function ListaDeuda({ data, ym, onClose, abrirCuarto }) {
                     ${x.deuda > x.falta && html`<small>Meses anteriores: ${money(x.deuda - x.falta)}</small>`}
                     ${x.falta > 0
                       ? html`<small class=${x.vencido ? "vencido" : ""}>${x.vencido ? "⏰ Venció el " : "📅 Vence el "}${fechaLarga(x.vence)}</small>`
+                      : x.seFue
+                      ? html`<small class="vencido">👋 Ya se fue${x.room.fin ? " en " + ymLabel(x.room.fin) : ""} y quedó debiendo</small>`
                       : html`<small class="vencido">⏰ Debe de meses anteriores</small>`}
                   </span>
                 </button>
@@ -684,7 +686,7 @@ function ListaDeuda({ data, ym, onClose, abrirCuarto }) {
 }
 
 /* =====================  CUARTOS  ===================== */
-const FILTROS_ESTADO = [["todos", "🏠 Todos"], ["pagado", "😄 Pagó"], ["parcial", "🙂 Una parte"], ["pendiente", "😟 Debe"], ["libre", "💤 Libre"]];
+const FILTROS_ESTADO = [["todos", "🏠 Todos"], ["pagado", "😄 Pagó"], ["parcial", "🙂 Una parte"], ["pendiente", "😟 Debe"], ["sefue", "👋 Se fue"], ["libre", "💤 Libre"]];
 
 function Cuartos({ data, ym, abrirCuarto }) {
   const [ubic, setUbic] = useState("todas");
@@ -890,6 +892,7 @@ function HojaCuarto({ data, room, ym, upd, avisar, onClose, onComprobante, onRep
           <${Campo} label="Alquiler mensual (S/)" tipo="number" valor=${edit.rent} onInput=${set("rent")} />
           <${Campo} label="Garantía recibida (S/)" tipo="number" valor=${edit.deposit} onInput=${set("deposit")} />
           <${Campo} label="Mes de inicio" tipo="month" valor=${edit.start} onInput=${(v) => { setInicioTocado(true); set("start")(v); }} />
+          <${Campo} label="Mes de salida (si ya se fue)" tipo="month" valor=${edit.fin} onInput=${set("fin")} />
           <${Campo} label="Día de pago (1 al 31)" tipo="number" valor=${edit.dueDay} onInput=${set("dueDay")} min="1" max="31" />
         </div>
         ${cambioDeInquilino && html`<p class="pista">¿Es un inquilino nuevo? Cambia el <b>Mes de inicio</b> al mes en que entró, así no le salen deudas del anterior.</p>`}

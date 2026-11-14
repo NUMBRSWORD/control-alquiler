@@ -120,6 +120,9 @@ body.con-hoja { overflow: hidden; }
 .cuadro.parcial { background: var(--amarillo-s); border-color: #f5d77a; color: #7a5600; }
 .cuadro.pendiente { background: var(--rojo-s); border-color: #f7a8b8; color: #a3203c; }
 .cuadro.libre { background: var(--libre-s); border-color: #dcd9e8; color: var(--gris); }
+.cuadro.sefue { background: var(--morado-s); border-color: #c9bcff; color: #4a33c9; }
+.mini-cuadro.sefue { background: var(--morado-s); color: #4a33c9; }
+.estado-grande.sefue { background: var(--morado-s); color: #4a33c9; }
 .cuadro.inactivo { background: #eee; color: #999; opacity: .6; }
 .tile:active, .btn:active, .cuadro:active, .chip:active, .cat:active, .enlace:active { transform: translateY(2px) scale(.98); }
 
