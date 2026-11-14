@@ -647,7 +647,7 @@ function ListaCobrado({ data, ym, onClose, abrirCuarto }) {
                 <${MiniCuadro} data=${data} room=${x.room} ym=${ym} />
                 <span class="item-main">
                   <b>${x.room.tenant || "Sin inquilino"}</b>
-                  ${x.pagos.map((p) => html`<small key=${p.id}>${ICONO_METODO[p.method] || "💵"} ${p.date} · ${p.method} · ${money(p.amount)}</small>`)}
+                  ${x.pagos.map((p) => html`<small key=${p.id}>${ICONO_METODO[p.method] || "💵"} ${p.date} · ${p.method} · ${money(p.amount)}${p.deudaVieja ? " · deuda vieja" : p.mes && p.mes !== ym ? ` · alquiler de ${ymLabel(p.mes)}` : ""}</small>`)}
                 </span>
                 <b class="monto verde">${money(x.pagado)}</b>
               </button>`)}
