@@ -740,6 +740,7 @@ function HojaCuarto({ data, room, ym, upd, avisar, onClose, onComprobante, onRep
   const [metodo, setMetodo] = useState("Efectivo");
   const [fecha, setFecha] = useState(fechaDefecto);
   const [nota, setNota] = useState("");
+  const [deudaVieja, setDeudaVieja] = useState(false);
   const [contrato, setContrato] = useState(null);
   const [subiendo, setSubiendo] = useState(false);
   const archivo = useRef(null);
@@ -784,7 +785,7 @@ function HojaCuarto({ data, room, ym, upd, avisar, onClose, onComprobante, onRep
     if (!a || a <= 0) return avisar("Escribe cuánto te pagaron.");
     upd((d) => {
       d.payments[room.id] ??= {};
-      (d.payments[room.id][ym] ??= []).push({ id: uid(), date: fecha, amount: a, method: metodo, note: nota });
+      (d.payments[room.id][ym] ??= []).push({ id: uid(), date: fecha, amount: a, method: metodo, note: nota, ...(deudaVieja ? { deudaVieja: true } : {}) });
     });
     setMonto(""); setNota("");
     avisar(`💰 Pago de ${money(a)} anotado en ${ymLabel(ym)}.`);
@@ -861,8 +862,11 @@ function HojaCuarto({ data, room, ym, upd, avisar, onClose, onComprobante, onRep
             <label class="campo"><span>Fecha</span><input type="date" value=${fecha} onInput=${(e) => setFecha(e.currentTarget.value)} /></label>
             <label class="campo"><span>Referencia (opcional)</span><input value=${nota} onInput=${(e) => setNota(e.currentTarget.value)} /></label>
           </div>
+          <label class="check"><input type="checkbox" checked=${deudaVieja} onChange=${(e) => setDeudaVieja(e.currentTarget.checked)} /> Es pago de una deuda vieja</label>
           <button class="btn primario ancho" onClick=${registrar}>➕ Anotar pago</button>
-          <small class="gris">Se anota como pago de <b>${ymLabel(ym)}</b>. Para otro mes, cámbialo arriba con ‹ ›.</small>
+          <small class="gris">${deudaVieja
+            ? html`Entra a la caja de <b>${ymLabel(ym)}</b>, pero <b>no cubre</b> el alquiler de ese mes.`
+            : html`Se anota como pago de <b>${ymLabel(ym)}</b>. Para otro mes, cámbialo arriba con ‹ ›.`}</small>
         </div>
         ${pagos.length > 0 && html`
           <ul class="pagos">
@@ -870,7 +874,7 @@ function HojaCuarto({ data, room, ym, upd, avisar, onClose, onComprobante, onRep
               <li key=${p.id}>
                 <span aria-hidden="true">${ICONO_METODO[p.method] || "💵"}</span>
                 <span class="gris">${p.date}</span>
-                <span class="pnota">${p.method}${p.note ? " · " + p.note : ""}</span>
+                <span class="pnota">${p.method}${p.note ? " · " + p.note : ""}${p.deudaVieja ? html`<span class="etiqueta">deuda vieja</span>` : ""}</span>
                 <b class="verde">${money(p.amount)}</b>
                 <button class="x" onClick=${() => borrarPago(p)} aria-label="Borrar pago">🗑️</button>
               </li>`)}
