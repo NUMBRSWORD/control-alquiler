@@ -16,8 +16,8 @@ const KEY_DATA = "casa:data:v1";
 const contractKey = (id) => `casa:contrato:${id}`;
 const DEMO = new URLSearchParams(location.search).has("demo");
 
-const CARA = { pagado: "😄", parcial: "🙂", pendiente: "😟", libre: "💤", inactivo: "🚫", sefue: "👋" };
-const ESTADO_TXT = { pagado: "Pagó este mes", parcial: "Pagó una parte", pendiente: "Todavía no paga", libre: "Cuarto libre", inactivo: "No se alquila", sefue: "Se fue debiendo" };
+const CARA = { pagado: "😄", parcial: "🙂", pendiente: "😟", libre: "💤", inactivo: "🚫", sefue: "👋", debeantes: "😕" };
+const ESTADO_TXT = { pagado: "Pagó este mes", parcial: "Pagó una parte", pendiente: "Todavía no paga", libre: "Cuarto libre", inactivo: "No se alquila", sefue: "Se fue debiendo", debeantes: "Pagó este mes, pero debe de antes" };
 const ICONO_METODO = { Efectivo: "💵", Yape: "📱", Plin: "📲", Transferencia: "🏦", Depósito: "🏧", Otro: "✨" };
 const ICONO_CAT = {
   Agua: "💧", Luz: "💡", Gas: "🔥", Tributos: "🏛️", Arbitrios: "📜", Internet: "📶", Mantenimiento: "🛠️",
@@ -304,7 +304,7 @@ function Campo({ label, valor, onInput, tipo = "text", ...resto }) {
 }
 
 function MiniCuadro({ data, room, ym }) {
-  const st = C.estadoCuarto(data, room, ym);
+  const st = C.estadoVisible(data, room, ym);
   const u = C.ubicacionDe(room.ubicacion);
   return html`
     <span class=${"mini-cuadro " + st} aria-hidden="true">
@@ -314,7 +314,7 @@ function MiniCuadro({ data, room, ym }) {
 }
 
 function Cuadro({ data, room, ym, onClick }) {
-  const st = C.estadoCuarto(data, room, ym);
+  const st = C.estadoVisible(data, room, ym);
   const u = C.ubicacionDe(room.ubicacion);
   const ocupado = C.ocupadoEn(room, ym);
   const deuda = C.deudaAcumulada(data, room, ym);
@@ -686,7 +686,7 @@ function ListaDeuda({ data, ym, onClose, abrirCuarto }) {
 }
 
 /* =====================  CUARTOS  ===================== */
-const FILTROS_ESTADO = [["todos", "🏠 Todos"], ["pagado", "😄 Pagó"], ["parcial", "🙂 Una parte"], ["pendiente", "😟 Debe"], ["sefue", "👋 Se fue"], ["libre", "💤 Libre"]];
+const FILTROS_ESTADO = [["todos", "🏠 Todos"], ["pagado", "😄 Pagó"], ["debeantes", "😕 Debe de antes"], ["parcial", "🙂 Una parte"], ["pendiente", "😟 Debe"], ["sefue", "👋 Se fue"], ["libre", "💤 Libre"]];
 
 function Cuartos({ data, ym, abrirCuarto }) {
   const [ubic, setUbic] = useState("todas");
@@ -697,7 +697,7 @@ function Cuartos({ data, ym, abrirCuarto }) {
   const pasa = (r) => {
     if (ubic === "sin" && r.ubicacion) return false;
     if (ubic !== "todas" && ubic !== "sin" && r.ubicacion !== ubic) return false;
-    if (estado !== "todos" && C.estadoCuarto(data, r, ym) !== estado) return false;
+    if (estado !== "todos" && C.estadoVisible(data, r, ym) !== estado) return false;
     if (q && !`${r.name} ${r.tenant} ${r.doc}`.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
   };
@@ -758,7 +758,7 @@ function HojaCuarto({ data, room, ym, upd, avisar, onClose, onComprobante, onRep
   const pagado = C.pagadoEn(data, room.id, ym);
   const falta = C.faltaMes(data, room, ym);
   const deuda = C.deudaAcumulada(data, room, ym);
-  const st = C.estadoCuarto(data, room, ym);
+  const st = C.estadoVisible(data, room, ym);
   const u = C.ubicacionDe(room.ubicacion);
   const hayCambios = JSON.stringify(edit) !== JSON.stringify(room);
 
